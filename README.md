@@ -28,8 +28,15 @@ npm link
 
 ## ⚙️ Setup
 
-### 1. Add to Claude Desktop Config
-Add to your `claude_desktop_config.json`:
+### 1. Add to Claude Code CLI
+Add VibeDoctor to your Claude Code CLI using the built-in MCP management:
+
+```bash
+claude mcp add-json "vibedoctor" '{"command":"vibedoctor","args":[]}'
+```
+
+### 2. Alternative: Manual Configuration
+If you prefer manual configuration, you can also add it to other MCP-compatible clients:
 
 ```json
 {
@@ -41,11 +48,6 @@ Add to your `claude_desktop_config.json`:
   }
 }
 ```
-
-### 2. Config File Locations
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
 
 ## 🎯 Usage
 
@@ -90,19 +92,22 @@ use vibedoctor to undo last 3 updates
 ## 🎨 Example Workflow
 
 ```bash
-# 1. Make changes with Claude Code CLI
+# 1. Install VibeDoctor in Claude Code CLI
+$ claude mcp add-json "vibedoctor" '{"command":"vibedoctor","args":[]}'
+
+# 2. Make changes with Claude Code CLI
 > add emoji to each section @index.html
 
-# 2. Claude Code makes changes
+# 3. Claude Code makes changes
 ⏺ Update(index.html) - adds emojis
 
-# 3. Export conversation  
+# 4. Export conversation  
 > /export
 
-# 4. Revert if needed
+# 5. Revert if needed
 > revert last change
 
-# 5. Works! Emojis are removed
+# 6. Works! Emojis are removed
 ✅ Successfully reverted last 1 changes. [DONE LAST 1]
 ```
 
