@@ -9,6 +9,7 @@
 - 🎯 **Sequential Operations**: Tracks state through conversation history for "revert 2 more" workflows
 - 🛡️ **Safe Processing**: Bottom-to-top line processing prevents conflicts
 - 🏷️ **Auto-Tagging**: Includes completion tags for perfect state tracking
+- 🔒 **Safety First**: Verifies clipboard contains valid Claude export before making any changes
 
 ## 🚀 Installation
 
@@ -65,12 +66,13 @@ vibedoctor undo last change
 ## 🔧 How It Works
 
 1. **Export Conversation**: Use `/export` in Claude after making changes
-2. **Automatic Analysis**: VibeDoctor parses the clipboard for Claude's Update operations
-3. **Smart Processing**: 
+2. **Clipboard Verification**: VibeDoctor checks for `✻ Welcome to Claude Code!` header to ensure valid export
+3. **Automatic Analysis**: Parses the clipboard for Claude's Update operations
+4. **Smart Processing**: 
    - Deletes `+` lines (added content)
    - Restores `-` lines (removed content)  
    - Processes changes in FILO order to prevent conflicts
-4. **State Tracking**: Uses conversation tags to handle sequential reverts
+5. **State Tracking**: Uses conversation tags to handle sequential reverts
 
 ## 📋 Supported Operations
 
@@ -111,6 +113,11 @@ VibeDoctor automatically tracks what's been reverted:
 No external state files needed - uses conversation tags for perfect tracking.
 
 ## 🐛 Troubleshooting
+
+### "Clipboard verification failed"
+- Run `/export` in your Claude conversation
+- Select "1. Copy to clipboard" 
+- Ensure clipboard starts with `✻ Welcome to Claude Code!`
 
 ### "No Update operations found"
 - Make sure you used `/export` after Claude made changes
