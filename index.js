@@ -55,6 +55,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const count = request.params.arguments?.count || 1;
       const conversationHistory = request.params.arguments?.conversation_history || '';
       
+      // First, verify clipboard contains Claude export
+      console.log("🔍 Verifying clipboard contains Claude export...");
+      const clipboardCheck = execSync('pbpaste | head -5', { encoding: 'utf8' });
+      
+      if (!clipboardCheck.includes('✻ Welcome to Claude Code!')) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '❌ **Clipboard verification failed!**\n\n' +
+                    'The clipboard does not contain a Claude export. Please:\n\n' +
+                    '1. Run `/export` in your Claude conversation\n' +
+                    '2. Select "1. Copy to clipboard"\n' +
+                    '3. Then try the revert operation again\n\n' +
+                    '**Expected format:** Clipboard should start with "✻ Welcome to Claude Code!"'
+            }
+          ]
+        };
+      }
+      
+      console.log("✅ Clipboard verification passed - Claude export detected");
+      
       // Calculate offset from conversation history
       let totalAlreadyReverted = 0;
       const revertTags = conversationHistory.match(/\[DONE LAST (\d+)\]/g) || [];
