@@ -1,0 +1,45 @@
+{
+  "name": "vibedoctor",
+  "version": "1.0.0",
+  "description": "VibeDoctor - MCP server that intelligently reverts Claude's code changes by analyzing clipboard exports. Handles additions, deletions, and mixed changes with smart state tracking.",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "vibedoctor": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol", 
+    "claude",
+    "developer-tools",
+    "vibedoctor",
+    "revert",
+    "undo",
+    "code-changes"
+  ],
+    "author": "Mukul Pathak",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pathakmukul/vibe-doctor.git"
+  },
+  "homepage": "https://github.com/pathakmukul/vibe-doctor#readme",
+  "bugs": {
+    "url": "https://github.com/pathakmukul/vibe-doctor/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.15.1"
+  },
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ]
+}
