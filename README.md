@@ -1,11 +1,11 @@
 # VibeDoctor 🩺
 
-**Your Claude Development Companion** - An MCP server that intelligently reverts Claude's code changes by analyzing clipboard exports. Handles additions, deletions, and mixed changes with smart state tracking.
+**Your Claude Code Development Companion** - An MCP server that intelligently reverts [Claude Code CLI](https://www.anthropic.com/claude-code) changes by analyzing clipboard exports. Handles additions, deletions, and mixed changes with smart state tracking.
 
 ## ✨ Features
 
 - 🔄 **Smart Revert Logic**: Handles additions, deletions, and mixed changes correctly
-- 📋 **Clipboard Analysis**: Parses Claude's exported conversation format automatically  
+- 📋 **Clipboard Analysis**: Parses Claude Code's exported conversation format automatically  
 - 🎯 **Sequential Operations**: Tracks state through conversation history for "revert 2 more" workflows
 - 🛡️ **Safe Processing**: Bottom-to-top line processing prevents conflicts
 - 🏷️ **Auto-Tagging**: Includes completion tags for perfect state tracking
@@ -49,11 +49,14 @@ Add to your `claude_desktop_config.json`:
 
 ## 🎯 Usage
 
-### Natural Language (Recommended)
+### Natural Language Commands (Recommended)
 ```
 revert last 2 changes
 undo the last 3 operations  
 revert last change
+fix my last mistake
+undo that last update
+revert the most recent 4 changes
 ```
 
 ### Explicit VibeDoctor Calls
@@ -61,13 +64,16 @@ revert last change
 use VibeDoctor to revert last 2
 VibeDoctor revert 3 operations
 vibedoctor undo last change
+call VibeDoctor to fix last 5 changes
+run VibeDoctor revert last operation
+use vibedoctor to undo last 3 updates
 ```
 
 ## 🔧 How It Works
 
-1. **Export Conversation**: Use `/export` in Claude after making changes
+1. **Export Conversation**: Use `/export` in Claude Code CLI after making changes
 2. **Clipboard Verification**: VibeDoctor checks for `✻ Welcome to Claude Code!` header to ensure valid export
-3. **Automatic Analysis**: Parses the clipboard for Claude's Update operations
+3. **Automatic Analysis**: Parses the clipboard for Claude Code's Update operations
 4. **Smart Processing**: 
    - Deletes `+` lines (added content)
    - Restores `-` lines (removed content)  
@@ -84,10 +90,10 @@ vibedoctor undo last change
 ## 🎨 Example Workflow
 
 ```bash
-# 1. Make changes with Claude
+# 1. Make changes with Claude Code CLI
 > add emoji to each section @index.html
 
-# 2. Claude makes changes
+# 2. Claude Code makes changes
 ⏺ Update(index.html) - adds emojis
 
 # 3. Export conversation  
@@ -115,12 +121,12 @@ No external state files needed - uses conversation tags for perfect tracking.
 ## 🐛 Troubleshooting
 
 ### "Clipboard verification failed"
-- Run `/export` in your Claude conversation
+- Run `/export` in your Claude Code CLI session
 - Select "1. Copy to clipboard" 
 - Ensure clipboard starts with `✻ Welcome to Claude Code!`
 
 ### "No Update operations found"
-- Make sure you used `/export` after Claude made changes
+- Make sure you used `/export` after Claude Code made changes
 - Verify clipboard contains the exported conversation
 
 ### "File not found" 
@@ -128,7 +134,7 @@ No external state files needed - uses conversation tags for perfect tracking.
 - Check that the files mentioned in the export exist
 
 ### "Line out of range"
-- Files may have been modified outside Claude between export and revert
+- Files may have been modified outside Claude Code between export and revert
 - Manual review may be needed for complex changes
 
 ## 🏗️ Technical Details

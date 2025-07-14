@@ -1,11 +1,11 @@
 {
   "name": "vibedoctor",
-  "version": "1.0.0",
-  "description": "VibeDoctor - MCP server that intelligently reverts Claude's code changes by analyzing clipboard exports. Handles additions, deletions, and mixed changes with smart state tracking.",
+  "version": "1.0.1",
+  "description": "VibeDoctor - MCP server that intelligently reverts Claude Code CLI changes by analyzing clipboard exports. Works with Claude Code (https://www.anthropic.com/claude-code) to handle additions, deletions, and mixed changes with smart state tracking.",
   "type": "module",
   "main": "index.js",
   "bin": {
-    "vibedoctor": "./index.js"
+    "vibedoctor": "index.js"
   },
   "scripts": {
     "start": "node index.js",
@@ -13,19 +13,21 @@
   },
   "keywords": [
     "mcp",
-    "model-context-protocol", 
-    "claude",
+    "model-context-protocol",
+    "claude-code",
+    "claude-cli",
     "developer-tools",
     "vibedoctor",
     "revert",
     "undo",
-    "code-changes"
+    "code-changes",
+    "anthropic"
   ],
-    "author": "Mukul Pathak",
+  "author": "Mukul Pathak",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pathakmukul/vibe-doctor.git"
+    "url": "git+https://github.com/pathakmukul/vibe-doctor.git"
   },
   "homepage": "https://github.com/pathakmukul/vibe-doctor#readme",
   "bugs": {
