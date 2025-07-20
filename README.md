@@ -5,12 +5,12 @@
 ## ✨ Features
 
 - 🎯 **Auto Session Detection**: Automatically finds your active Claude Code session by analyzing your message
-- 🔄 **Universal Revert Logic**: Deletes `+` lines (added content), restores `-` lines (removed content)
-- 📁 **Direct JSONL Access**: Reads conversation history directly from `~/.claude/projects/`
+- 🔄 **Smart Revert Logic**: Intelligently reverts both additions and deletions
+- 📁 **Session Integration**: Works directly with your Claude Code CLI sessions
 - 🏷️ **Sequential Operations**: Handles multiple revert commands with perfect state tracking  
 - 🔢 **Flexible Count**: Revert last 1, 2, 3... up to 10 changes in one command
 - 📍 **Correct Working Directory**: Uses the exact working directory from your Claude Code session
-- 🔒 **Structured Patch Data**: Works with Claude Code's native JSON patch format for precision
+- 🔒 **Precise Reverts**: Accurately identifies and reverts specific changes
 - ⚡ **Claude Code CLI Integration**: Works exclusively with Claude Code CLI sessions
 
 ## 🚀 Installation
@@ -75,16 +75,7 @@ use vibedoctor to undo last 3 updates
 
 ## 🔧 How It Works
 
-1. **Send Message**: Ask VibeDoctor to revert changes (e.g., "revert last 2 changes")
-2. **Auto Session Detection**: VibeDoctor finds your active session by matching your message to recent JSONL entries
-3. **Direct JSONL Access**: Reads conversation history directly from `~/.claude/projects/[your-project]/[session-id].jsonl`
-4. **Structured Patch Parsing**: Extracts `+`/`-` lines from `toolUseResult.structuredPatch` data
-5. **Smart Processing**: 
-   - Deletes `+` lines (added content)
-   - Restores `-` lines (removed content)  
-   - Processes changes in FILO order to prevent conflicts
-6. **Correct Working Directory**: Uses the `cwd` from the JSONL session data
-7. **State Tracking**: Uses conversation tags to handle sequential reverts
+VibeDoctor intelligently analyzes your Claude Code CLI session to identify and revert recent changes. Simply ask it to revert your last changes, and it handles the rest automatically.
 
 ## 📋 Supported Operations
 
@@ -124,18 +115,16 @@ VibeDoctor automatically tracks what's been reverted:
 ```
 
 ### Conversation History Integration
-No external state files needed - uses conversation tags for perfect tracking.
+Seamlessly integrates with your session history for accurate tracking.
 
 ## 🐛 Troubleshooting
 
 ### "Could not find Claude Code session"
 - Make sure you're running this from the same Claude Code CLI session where you made changes
 - Verify your message contains the keywords you're trying to revert
-- Check that `~/.claude/projects/` directory exists and contains your project
 
 ### "No changes found to revert"
 - Ensure Claude Code CLI has made file modifications in this session
-- Check that the JSONL file contains file modification entries
 - Verify you haven't already reverted all available changes
 
 ### "File not found" 
