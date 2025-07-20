@@ -2,47 +2,244 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { 
+import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { execSync } from 'child_process';
-import { createWriteStream } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { writeFileSync, readFileSync, existsSync, statSync, readdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { homedir } from 'os';
 
-const server = new Server({
-  name: 'VibeDoctor',
-  version: '1.0.0'
-}, {
-  capabilities: {
-    tools: {}
+const server = new Server(
+  {
+    name: 'vibedoctor',
+    version: '2.0.0',
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
   }
-});
+);
+
+// Find Claude Code conversation JSONLs directory
+function findClaudeProjectsDir() {
+  const claudeDir = join(homedir(), '.claude', 'projects');
+  if (!existsSync(claudeDir)) {
+    throw new Error('Claude Code projects directory not found at ~/.claude/projects');
+  }
+  return claudeDir;
+}
+
+// Find the active JSONL based on user message and recent timestamp
+function findActiveSession(userMessage, args) {
+  const projectsDir = findClaudeProjectsDir();
+  const projectDirs = readdirSync(projectsDir);
+  
+  let mostRecentMatch = null;
+  let mostRecentTime = 0;
+  
+  for (const projectDir of projectDirs) {
+    const fullProjectPath = join(projectsDir, projectDir);
+    if (!statSync(fullProjectPath).isDirectory()) continue;
+    
+    const jsonlFiles = readdirSync(fullProjectPath).filter(f => f.endsWith('.jsonl'));
+    
+    for (const jsonlFile of jsonlFiles) {
+      const jsonlPath = join(fullProjectPath, jsonlFile);
+      try {
+        const content = readFileSync(jsonlPath, 'utf8');
+        const lines = content.trim().split('\n');
+        
+        // Check last few lines for user message match
+        const recentLines = lines.slice(-5); // Last 5 entries
+        
+        for (const line of recentLines) {
+          const entry = JSON.parse(line);
+          
+          // Look for user messages that match our search
+          if (entry.type === 'user' && 
+              entry.message?.role === 'user' && 
+              entry.message?.content) {
+            
+            // Handle both array and string content formats
+            let contentText = '';
+            if (Array.isArray(entry.message.content)) {
+              contentText = entry.message.content
+                .filter(c => c.type === 'text')
+                .map(c => c.text)
+                .join(' ');
+            } else if (typeof entry.message.content === 'string') {
+              contentText = entry.message.content;
+            }
+            contentText = contentText.toLowerCase();
+            
+            const searchText = userMessage.toLowerCase();
+            
+            // Check if this message contains our user message
+            if (contentText.includes(searchText)) {
+              const timestamp = new Date(entry.timestamp).getTime();
+              
+              if (timestamp > mostRecentTime) {
+                mostRecentTime = timestamp;
+                mostRecentMatch = {
+                  jsonlPath,
+                  projectDir: fullProjectPath,
+                  cwd: entry.cwd,
+                  sessionId: entry.sessionId,
+                  timestamp: entry.timestamp
+                };
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error reading ${jsonlPath}:`, error.message);
+      }
+    }
+  }
+  
+  return mostRecentMatch;
+}
+
+// Extract revert operations from JSONL structuredPatch data
+function extractRevertOperations(jsonlPath, count, conversationHistory) {
+  const content = readFileSync(jsonlPath, 'utf8');
+  const lines = content.trim().split('\n');
+  
+  const operations = [];
+  
+  // Calculate offset from previous reverts
+  let totalAlreadyReverted = 0;
+  const revertTags = conversationHistory.match(/\[VIBEDOCTOR CHANGES: (\d+)\]/g) || [];
+  
+  for (const tag of revertTags) {
+    const match = tag.match(/\[VIBEDOCTOR CHANGES: (\d+)\]/);
+    if (match) {
+      totalAlreadyReverted += parseInt(match[1]);
+    }
+  }
+  
+  console.log(`Found ${revertTags.length} previous revert operations totaling ${totalAlreadyReverted} changes`);
+  
+  // Find all tool results with file changes
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      
+      if (entry.type === 'user' && entry.toolUseResult) {
+        const result = entry.toolUseResult;
+        
+        // Handle file edits (oldString/newString replacement)
+        if (result.oldString && result.newString) {
+          console.log(`Found file edit: ${result.filePath}`);
+          operations.push({
+            type: 'replace',
+            file: result.filePath,
+            oldContent: result.newString, // What's currently there
+            newContent: result.oldString, // What to change it back to
+            timestamp: entry.timestamp
+          });
+        }
+        // Handle file creations (make file empty) - only if explicitly a create operation
+        else if (result.type === 'create' && result.content && !result.oldString) {
+          console.log(`Found file creation: ${result.filePath}`);
+          operations.push({
+            type: 'empty',
+            file: result.filePath,
+            timestamp: entry.timestamp
+          });
+        }
+        else {
+          console.log(`Skipped operation: ${result.filePath}, type: ${result.type}, hasOldString: ${!!result.oldString}, hasNewString: ${!!result.newString}`);
+        }
+      }
+    } catch (error) {
+      // Skip invalid JSON lines
+    }
+  }
+  
+  // Sort by timestamp (newest first) then by line number (descending within files)
+  operations.sort((a, b) => {
+    const timeCompare = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    if (timeCompare !== 0) return timeCompare;
+    
+    const fileCompare = a.file.localeCompare(b.file);
+    if (fileCompare !== 0) return fileCompare;
+    
+    return b.lineNumber - a.lineNumber;
+  });
+  
+  // Skip operations we already reverted and take the count we want
+  const operationsToRevert = operations.slice(totalAlreadyReverted, totalAlreadyReverted + count);
+  
+  console.log(`Selected ${operationsToRevert.length} operations to revert (skipped ${totalAlreadyReverted} already reverted)`);
+  
+  return operationsToRevert;
+}
+
+// Apply the revert operations
+function applyRevertOperations(operations, workingDir) {
+  const results = [];
+  
+  for (const op of operations) {
+    try {
+      if (op.type === 'replace') {
+        // Read the file content
+        const content = readFileSync(op.file, 'utf8');
+        
+        // Replace newString with oldString
+        const updatedContent = content.replace(op.oldContent, op.newContent);
+        
+        // Write back to file
+        writeFileSync(op.file, updatedContent, 'utf8');
+        
+        results.push(`✅ Replaced content in ${op.file}`);
+        
+      } else if (op.type === 'empty') {
+        // Make the file empty to revert file creation
+        writeFileSync(op.file, '', 'utf8');
+        
+        results.push(`✅ Emptied ${op.file} (reverted file creation)`);
+      }
+      
+    } catch (error) {
+      results.push(`❌ Error processing ${op.file}: ${error.message}`);
+    }
+  }
+  
+  return results;
+}
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
         name: 'revert_last_changes',
-        description: 'Revert the last N changes made by Claude from the clipboard export. Use count parameter to specify how many changes to revert (e.g., count: 3 for "revert last 3 changes"). Automatically tracks state through conversation history to handle sequential revert operations correctly.',
+        description: 'Intelligently reverts the last N changes made by Claude Code CLI by analyzing conversation JSONL files. Automatically finds the active session and reverts file modifications using structured patch data.',
         inputSchema: {
           type: 'object',
           properties: {
             count: {
-              type: 'number',
-              description: 'Number of recent changes to revert. Default is 1. Use 2 for "revert last 2 changes", 3 for "revert last 3 changes", etc.',
-              default: 1,
+              type: 'integer',
+              description: 'Number of recent changes to revert (1-10)',
               minimum: 1,
-              maximum: 10
+              maximum: 10,
+              default: 1
+            },
+            user_message: {
+              type: 'string',
+              description: 'The message you sent to Claude Code that triggered this revert request',
+              default: ''
             },
             conversation_history: {
-              type: 'string',
-              description: 'The conversation history to scan for previous revert operations. This is used to calculate the correct offset for sequential reverts.',
+              type: 'string', 
+              description: 'Conversation history to track previous revert operations',
               default: ''
             }
           },
-          additionalProperties: false
+          required: []
         }
       }
     ]
@@ -53,253 +250,68 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (request.params.name === 'revert_last_changes') {
     try {
       const count = request.params.arguments?.count || 1;
+      const userMessage = request.params.arguments?.user_message || 'revert';
       const conversationHistory = request.params.arguments?.conversation_history || '';
       
-      // First, verify clipboard contains Claude export
-      console.log("🔍 Verifying clipboard contains Claude export...");
-      const clipboardCheck = execSync('pbpaste | head -5', { encoding: 'utf8' });
+      console.log(`VibeDoctor: Looking for session with user message: "${userMessage}"`);
       
-      if (!clipboardCheck.includes('✻ Welcome to Claude Code!')) {
+      // Find the active session
+      const session = findActiveSession(userMessage, request.params.arguments);
+      
+      if (!session) {
         return {
           content: [
             {
               type: 'text',
-              text: '❌ **Clipboard verification failed!**\n\n' +
-                    'The clipboard does not contain a Claude export. Please:\n\n' +
-                    '1. Run `/export` in your Claude conversation\n' +
-                    '2. Select "1. Copy to clipboard"\n' +
-                    '3. Then try the revert operation again\n\n' +
-                    '**Expected format:** Clipboard should start with "✻ Welcome to Claude Code!"'
+              text: `❌ Could not find Claude Code session containing message: "${userMessage}"\n\nMake sure you're running this from the same session where you made the changes.`
             }
           ]
         };
       }
       
-      console.log("✅ Clipboard verification passed - Claude export detected");
+      console.log(`Found active session: ${session.sessionId} in ${session.cwd}`);
       
-      // Calculate offset from conversation history
-      let totalAlreadyReverted = 0;
-      const revertTags = conversationHistory.match(/\[DONE LAST (\d+)\]/g) || [];
+      // Extract revert operations from the JSONL
+      const operations = extractRevertOperations(session.jsonlPath, count, conversationHistory);
       
-      for (const tag of revertTags) {
-        const match = tag.match(/\[DONE LAST (\d+)\]/);
-        if (match) {
-          totalAlreadyReverted += parseInt(match[1]);
-        }
+      if (operations.length === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ No changes found to revert in session ${session.sessionId}.\n\nMake sure Claude Code has made file modifications in this session.`
+            }
+          ]
+        };
       }
       
-      console.log(`Found ${revertTags.length} previous revert operations totaling ${totalAlreadyReverted} changes`);
+      // Apply the revert operations in the correct working directory
+      const results = applyRevertOperations(operations, session.cwd);
       
-      const tempFile = join(tmpdir(), 'e.txt');
-      const updateLinesFile = join(tmpdir(), 'update_lines.txt');
-
-      const command = `
-echo "=== STARTING REVERT (${count} changes, offset: ${totalAlreadyReverted}) ===" &&
-echo "1. Saving clipboard to ${tempFile}..." &&
-pbpaste > ${tempFile} &&
-echo "   Saved $(wc -l < ${tempFile}) lines" &&
-echo "" &&
-echo "2. Finding Update operations (skipping first ${totalAlreadyReverted}, taking next ${count})..." &&
-grep -n "^⏺ Update(" ${tempFile} | tail -$((${totalAlreadyReverted} + ${count})) | head -${count} > ${updateLinesFile} &&
-echo "   Found $(cat ${updateLinesFile} | wc -l) Update operations" &&
-echo "" &&
-echo "3. Processing changes in FILO order..." &&
-if [ -s ${updateLinesFile} ]; then
-  python3 -c "
-import sys
-import re
-import os
-
-# Read the update line numbers from file and reverse them
-with open('${updateLinesFile}', 'r') as f:
-    update_lines = [int(line.strip().split(':')[0]) for line in f if line.strip()]
-
-# Reverse the list for FILO processing
-update_lines.reverse()
-
-print(f'   Total updates to process: {len(update_lines)}')
-print(f'   Offset applied: ${totalAlreadyReverted} (from conversation history)')
-
-if not update_lines:
-    print('   No update lines found!')
-    sys.exit(0)
-
-# Process each update in FILO order
-for i, current_update in enumerate(update_lines):
-    print(f'   Processing Update {i+1}/{len(update_lines)} at line: {current_update}')
-    
-    # Find the next update line to know where this update block ends
-    next_update = None
-    for other_line in update_lines:
-        if other_line > current_update:
-            next_update = other_line
-            break
-    
-    next_info = next_update if next_update else 'end of file'
-    print(f'     Next update at line: {next_info}')
-    
-    # Read the file content
-    try:
-        with open('${tempFile}', 'r') as f:
-            file_lines = f.readlines()
-        print(f'     Read {len(file_lines)} lines from clipboard file')
-    except Exception as e:
-        print(f'     Error reading clipboard file: {e}')
-        continue
-    
-    # Extract the relevant section
-    if next_update:
-        # Process between current and next update
-        relevant_lines = file_lines[current_update-1:next_update-1]
-    else:
-        # Process from current update to end
-        relevant_lines = file_lines[current_update-1:]
-    
-    print(f'     Extracted {len(relevant_lines)} relevant lines')
-    
-    # Parse the update section
-    filename = None
-    changes_made = False
-    
-    # Find the filename from Update() line
-    for line in relevant_lines:
-        if line.startswith('⏺ Update('):
-            match = re.search(r'Update\\(([^)]+)\\)', line)
-            if match:
-                filename = match.group(1)
-                print(f'     File: {filename}')
-                break
-    
-    if not filename:
-        print('     No filename found in this update section')
-        for j, line in enumerate(relevant_lines[:10]):  # Show first 10 lines for debugging
-            print(f'       Line {j}: {line.strip()}')
-        continue
-    
-    # Collect all changes for this update
-    line_changes = []
-    in_changes_section = False
-    
-    for line in relevant_lines:
-        # Look for the changes section (lines with numbers and +/-)
-        if re.match(r'^\\s+\\d+\\s+[-+]\\s+', line):
-            in_changes_section = True
-            line_match = re.match(r'^\\s+(\\d+)\\s+([-+])\\s+(.*)$', line)
-            if line_match:
-                line_num = int(line_match.group(1))
-                change_type = line_match.group(2)
-                content = line_match.group(3)
-                
-                if change_type == '-':
-                    # This is content that was removed, so we need to restore it
-                    line_changes.append((line_num, 'restore', content))
-                    print(f'     Found removed line {line_num}: {content[:60]}... (will restore)')
-                elif change_type == '+':
-                    # This is content that was added, so we need to delete it
-                    line_changes.append((line_num, 'delete', content))
-                    print(f'     Found added line {line_num}: {content[:60]}... (will delete)')
-        elif in_changes_section and not re.match(r'^\\s+\\d+', line) and line.strip():
-            # We've moved past the changes section
-            break
-    
-    print(f'     Found {len(line_changes)} line changes to process')
-    
-    # Sort changes by line number in descending order (bottom to top)
-    line_changes.sort(key=lambda x: x[0], reverse=True)
-    
-    if line_changes and os.path.exists(filename):
-        try:
-            # Read the file
-            with open(filename, 'r') as f:
-                file_lines = f.readlines()
-            
-            print(f'     Processing {len(line_changes)} line changes...')
-            
-            # Apply changes from bottom to top: first delete +, then restore -
-            # Process deletions first (+ lines that were added)
-            for line_num, action, content in line_changes:
-                if action == 'delete':
-                    if 0 <= line_num - 1 < len(file_lines):
-                        current_content = file_lines[line_num - 1].rstrip()
-                        # Remove the line by deleting it from the list
-                        del file_lines[line_num - 1]
-                        
-                        print(f'     ✓ Line {line_num} (deleted):')
-                        print(f'       REMOVED: {current_content[:80]}...')
-                        changes_made = True
-                    else:
-                        print(f'     ✗ Line {line_num} is out of range (file has {len(file_lines)} lines)')
-            
-            # Then process restorations (- lines that were removed)
-            for line_num, action, content in line_changes:
-                if action == 'restore':
-                    if 0 <= line_num - 1 <= len(file_lines):
-                        line_ending = '\\n' if not content.endswith('\\n') else ''
-                        file_lines.insert(line_num - 1, content + line_ending)
-                        
-                        print(f'     ✓ Line {line_num} (restored):')
-                        print(f'       INSERTED: {content[:80]}...')
-                        changes_made = True
-                    else:
-                        print(f'     ✗ Line {line_num} is out of range for insertion (file has {len(file_lines)} lines)')
-            
-            if changes_made:
-                # Write back to file
-                with open(filename, 'w') as f:
-                    f.writelines(file_lines)
-                print(f'     ✓ File {filename} updated successfully with {len(line_changes)} changes')
-            
-        except Exception as e:
-            print(f'     ✗ Failed to process file {filename}: {e}')
-    elif filename and not os.path.exists(filename):
-        print(f'     ✗ File {filename} not found')
-    elif not line_changes:
-        print(f'     ⚠ No line changes found for this update')
-        # Show some sample lines for debugging
-        print('     Sample lines from this update:')
-        for j, line in enumerate(relevant_lines[:15]):
-            print(f'       {j+current_update}: {line.strip()}')
-    else:
-        print(f'     ⚠ No filename found for this update')
-    
-    print('     ---')
-
-# Clean up
-try:
-    os.remove('${updateLinesFile}')
-except:
-    pass
-"
-else
-  echo "No Update operations found in clipboard"
-fi &&
-echo "" &&
-echo "=== REVERT COMPLETE ==="
-`;
+      const successMessage = `✅ Successfully reverted last ${operations.length} changes. [VIBEDOCTOR CHANGES: ${operations.length}]\n\n` +
+                           `Session: ${session.sessionId}\n` +
+                           `Working Directory: ${session.cwd}\n\n` +
+                           `Operations:\n${results.join('\n')}\n\n` +
+                           `**Important:** Please include this tag in your response: [VIBEDOCTOR CHANGES: ${operations.length}]`;
       
-      const output = execSync(command, {encoding: 'utf8'});
-      
-      // Generate the response that Claude should include in its visible response
-      const responseText = `${output}
-
-✅ Successfully reverted last ${count} changes.
-
-**Important:** Include this tag in your response: [DONE LAST ${count}]
-
-This tag helps track the revert history for future sequential operations. Make sure to mention this tag when you respond to the user about the revert completion.`;
-      
-      return { 
-        content: [{ 
-          type: 'text', 
-          text: responseText
-        }] 
+      return {
+        content: [
+          {
+            type: 'text',
+            text: successMessage
+          }
+        ]
       };
+      
     } catch (error) {
-      return { 
-        content: [{ 
-          type: 'text', 
-          text: `Error reverting changes: ${error.message}` 
-        }] 
+      console.error('VibeDoctor error:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ VibeDoctor error: ${error.message}\n\nPlease ensure:\n- You're in a Claude Code session\n- Claude Code has made recent file changes\n- The conversation JSONL files are accessible`
+          }
+        ]
       };
     }
   }
@@ -310,6 +322,10 @@ This tag helps track the revert history for future sequential operations. Make s
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  console.error('VibeDoctor v2.0.0 MCP server running (JSONL-powered)');
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error('Failed to start VibeDoctor server:', error);
+  process.exit(1);
+});

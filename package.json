@@ -1,7 +1,7 @@
 {
   "name": "vibedoctor",
-  "version": "1.0.2",
-  "description": "VibeDoctor - MCP server that intelligently reverts Claude Code CLI changes by analyzing clipboard exports. Works with Claude Code (https://www.anthropic.com/claude-code) to handle additions, deletions, and mixed changes with smart state tracking.",
+  "version": "2.0.1",
+  "description": "VibeDoctor v2.0 - MCP server that intelligently reverts Claude Code CLI changes by analyzing conversation JSONL files. No more clipboard exports needed! Automatically finds active sessions and reverts file modifications using structured patch data.",
   "type": "module",
   "main": "index.js",
   "bin": {

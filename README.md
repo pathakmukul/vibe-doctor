@@ -1,15 +1,17 @@
-# VibeDoctor 🩺
+# VibeDoctor 🩺 v2.0
 
-**Your Claude Code Development Companion** - An MCP server that intelligently reverts [Claude Code CLI](https://www.anthropic.com/claude-code) changes by analyzing clipboard exports. Handles additions, deletions, and mixed changes with smart state tracking.
+**Your Claude Code CLI Development Companion** - An MCP server that intelligently reverts [Claude Code CLI](https://www.anthropic.com/claude-code) changes by analyzing conversation JSONL files. Automatically finds active sessions and reverts file modifications using structured patch data.
 
 ## ✨ Features
 
-- 🔄 **Smart Revert Logic**: Handles additions, deletions, and mixed changes correctly
-- 📋 **Clipboard Analysis**: Parses Claude Code's exported conversation format automatically  
-- 🎯 **Sequential Operations**: Tracks state through conversation history for "revert 2 more" workflows
-- 🛡️ **Safe Processing**: Bottom-to-top line processing prevents conflicts
-- 🏷️ **Auto-Tagging**: Includes completion tags for perfect state tracking
-- 🔒 **Safety First**: Verifies clipboard contains valid Claude export before making any changes
+- 🎯 **Auto Session Detection**: Automatically finds your active Claude Code session by analyzing your message
+- 🔄 **Universal Revert Logic**: Deletes `+` lines (added content), restores `-` lines (removed content)
+- 📁 **Direct JSONL Access**: Reads conversation history directly from `~/.claude/projects/`
+- 🏷️ **Sequential Operations**: Handles multiple revert commands with perfect state tracking  
+- 🔢 **Flexible Count**: Revert last 1, 2, 3... up to 10 changes in one command
+- 📍 **Correct Working Directory**: Uses the exact working directory from your Claude Code session
+- 🔒 **Structured Patch Data**: Works with Claude Code's native JSON patch format for precision
+- ⚡ **Claude Code CLI Integration**: Works exclusively with Claude Code CLI sessions
 
 ## 🚀 Installation
 
@@ -73,14 +75,16 @@ use vibedoctor to undo last 3 updates
 
 ## 🔧 How It Works
 
-1. **Export Conversation**: Use `/export` in Claude Code CLI after making changes
-2. **Clipboard Verification**: VibeDoctor checks for `✻ Welcome to Claude Code!` header to ensure valid export
-3. **Automatic Analysis**: Parses the clipboard for Claude Code's Update operations
-4. **Smart Processing**: 
+1. **Send Message**: Ask VibeDoctor to revert changes (e.g., "revert last 2 changes")
+2. **Auto Session Detection**: VibeDoctor finds your active session by matching your message to recent JSONL entries
+3. **Direct JSONL Access**: Reads conversation history directly from `~/.claude/projects/[your-project]/[session-id].jsonl`
+4. **Structured Patch Parsing**: Extracts `+`/`-` lines from `toolUseResult.structuredPatch` data
+5. **Smart Processing**: 
    - Deletes `+` lines (added content)
    - Restores `-` lines (removed content)  
    - Processes changes in FILO order to prevent conflicts
-5. **State Tracking**: Uses conversation tags to handle sequential reverts
+6. **Correct Working Directory**: Uses the `cwd` from the JSONL session data
+7. **State Tracking**: Uses conversation tags to handle sequential reverts
 
 ## 📋 Supported Operations
 
@@ -101,14 +105,13 @@ $ claude mcp add-json "vibedoctor" '{"command":"vibedoctor","args":[]}'
 # 3. Claude Code makes changes
 ⏺ Update(index.html) - adds emojis
 
-# 4. Export conversation  
-> /export
-
-# 5. Revert if needed
+# 4. Revert if needed
 > revert last change
 
-# 6. Works! Emojis are removed
-✅ Successfully reverted last 1 changes. [DONE LAST 1]
+# 5. Works! Emojis are removed
+✅ Successfully reverted last 1 changes. [VIBEDOCTOR CHANGES: 1]
+Session: d9e3caf1-0ca2-490d-b914-012e952193fe
+Working Directory: /Users/username/projects/myproject
 ```
 
 ## 🔍 Advanced Features
@@ -125,21 +128,22 @@ No external state files needed - uses conversation tags for perfect tracking.
 
 ## 🐛 Troubleshooting
 
-### "Clipboard verification failed"
-- Run `/export` in your Claude Code CLI session
-- Select "1. Copy to clipboard" 
-- Ensure clipboard starts with `✻ Welcome to Claude Code!`
+### "Could not find Claude Code session"
+- Make sure you're running this from the same Claude Code CLI session where you made changes
+- Verify your message contains the keywords you're trying to revert
+- Check that `~/.claude/projects/` directory exists and contains your project
 
-### "No Update operations found"
-- Make sure you used `/export` after Claude Code made changes
-- Verify clipboard contains the exported conversation
+### "No changes found to revert"
+- Ensure Claude Code CLI has made file modifications in this session
+- Check that the JSONL file contains file modification entries
+- Verify you haven't already reverted all available changes
 
 ### "File not found" 
-- Ensure you're in the correct working directory
-- Check that the files mentioned in the export exist
+- The working directory from Claude Code CLI session may differ from current directory
+- Files may have been moved or deleted since the changes were made
 
 ### "Line out of range"
-- Files may have been modified outside Claude Code between export and revert
+- Files may have been modified outside Claude Code CLI between changes and revert
 - Manual review may be needed for complex changes
 
 ## 🏗️ Technical Details
@@ -160,6 +164,10 @@ MIT License - See [LICENSE](LICENSE) file for details.
 3. Make your changes  
 4. Add tests if applicable
 5. Submit a pull request
+
+## 📝 Note
+
+VibeDoctor is designed specifically for Claude Code CLI and will not work with other Claude interfaces (web, desktop app, etc.).
 
 ## 🙋 Support
 
